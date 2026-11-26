@@ -109,20 +109,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
           </div>
         </div>
 
-        {/* Dataset Card */}
+        {/* Real-Time Engine Card */}
         <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800/80 hover:border-gray-700 transition-all shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Dataset Size</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Recognition Modes</span>
             <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400">
-              <Database className="w-4 h-4" />
+              <Camera className="w-4 h-4" />
             </div>
           </div>
           <div className="mt-3">
             <div className="text-2xl font-bold text-white">
-              {stats?.total_valid_images ? `${stats.total_valid_images.toLocaleString()} Images` : '10,873 Images'}
+              Dual ASL Engine
             </div>
             <p className="text-xs text-gray-400 mt-1">
-              ASL Alphabet RGB Dataset
+              Mode 1 (Letters A-Z) + Mode 2 (Full Words)
             </p>
           </div>
         </div>

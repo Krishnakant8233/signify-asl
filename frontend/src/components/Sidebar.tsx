@@ -27,7 +27,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'live', label: 'Live Recognition', icon: Camera, badge: 'LIVE' },
     { id: 'sentence', label: 'Sentence Builder', icon: MessageSquareText },
-    { id: 'dataset', label: 'Dataset Explorer', icon: Database },
     { id: 'speech', label: 'Speech Settings', icon: Volume2 },
   ];
 
