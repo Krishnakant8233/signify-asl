@@ -16,6 +16,8 @@ export interface ClassificationResult {
   isStable: boolean;
   isResting: boolean;
   isTransition: boolean;
+  motionVelocity: number;
+  isStill: boolean;
 }
 
 // 21 Joint Connections for rendering the hand skeleton (finger joints & bones)
@@ -45,12 +47,13 @@ function dist(p1: Landmark, p2: Landmark): number {
 export class ASLLandmarkClassifier {
   private history: string[] = [];
   private historySize = 5;
-  private prevWrist: Landmark | null = null;
+  private prevKeyPoints: Landmark[] | null = null;
   private prevTimestamp: number = 0;
+  private smoothedMotion: number = 0.05;
 
   /**
    * Classifies 21 hand landmarks into ASL letters A-Z and SPACE.
-   * Tolerant of natural human hand flexibility; detects and suppresses hand drops/transitions.
+   * Tracks joint stillness: waits until user stops adjusting and holds hand still.
    */
   public classify(landmarks: Landmark[]): ClassificationResult {
     if (!landmarks || landmarks.length < 21) {
@@ -62,73 +65,61 @@ export class ASLLandmarkClassifier {
         isStable: false,
         isResting: true,
         isTransition: false,
+        motionVelocity: 0,
+        isStill: false,
       };
     }
 
     const now = Date.now();
     const wrist = landmarks[0];
     const thumbTip = landmarks[4];
-    const thumbIP = landmarks[3];
-    const thumbMCP = landmarks[2];
-    const thumbCMC = landmarks[1];
-
     const indexTip = landmarks[8];
-    const indexDIP = landmarks[7];
-    const indexPIP = landmarks[6];
-    const indexMCP = landmarks[5];
-
     const middleTip = landmarks[12];
-    const middleDIP = landmarks[11];
-    const middlePIP = landmarks[10];
+    const ringTip = landmarks[16];
+    const pinkyTip = landmarks[20];
     const middleMCP = landmarks[9];
 
-    const ringTip = landmarks[16];
-    const ringDIP = landmarks[15];
-    const ringPIP = landmarks[14];
-    const ringMCP = landmarks[13];
+    // Track displacement of 6 key anatomical points (wrist + 5 fingertips)
+    const currentKeyPoints = [wrist, thumbTip, indexTip, middleTip, ringTip, pinkyTip];
+    let instantMotion = 0;
 
-    const pinkyTip = landmarks[20];
-    const pinkyDIP = landmarks[19];
-    const pinkyPIP = landmarks[18];
-    const pinkyMCP = landmarks[17];
+    if (this.prevKeyPoints && this.prevKeyPoints.length === currentKeyPoints.length) {
+      const dt = Math.max(1, now - this.prevTimestamp);
+      const frameScale = dt / 16.6; // normalized to 60fps frame
+      let sumDist = 0;
+      for (let i = 0; i < currentKeyPoints.length; i++) {
+        sumDist += dist(currentKeyPoints[i], this.prevKeyPoints[i]);
+      }
+      instantMotion = (sumDist / currentKeyPoints.length) / Math.max(0.5, frameScale);
+    }
+    this.prevKeyPoints = currentKeyPoints.map((p) => ({ ...p }));
+    this.prevTimestamp = now;
 
-    // Palm scale metric: distance from wrist to middle MCP
-    const palmSize = Math.max(0.01, dist(wrist, middleMCP));
+    // Exponential smoothing for stable velocity
+    this.smoothedMotion = this.smoothedMotion * 0.7 + instantMotion * 0.3;
+
+    // Stillness threshold: < 0.016 indicates fixed/still hand ready to be recognized
+    const isStill = this.smoothedMotion < 0.018;
 
     // -------------------------------------------------------------
     // 1. HAND DROP & REST POSE DETECTION (CRITICAL)
     // -------------------------------------------------------------
-    // In camera coordinates, y increases downwards (0 = top, 1 = bottom).
-    // When signing, knuckles are above wrist (middleMCP.y < wrist.y).
-    // When lowering/resting hand:
-    //  a) The hand points downwards: middleMCP.y > wrist.y or middleTip.y > wrist.y
-    //  b) Wrist is at the very bottom edge (wrist.y > 0.88)
     const isPointingDown = (middleMCP.y - wrist.y) > 0.04 || (middleTip.y - wrist.y) > 0.12;
     const isAtBottomEdge = wrist.y > 0.88 || middleMCP.y > 0.88;
-
-    // Movement velocity tracking (detect rapid downward/sideways transition motion)
-    let isTransition = false;
-    if (this.prevWrist) {
-      const dt = Math.max(1, now - this.prevTimestamp);
-      const velocity = dist(wrist, this.prevWrist) / (dt / 16.6); // normalized per frame (~60fps)
-      if (velocity > 0.055) {
-        isTransition = true;
-      }
-    }
-    this.prevWrist = { ...wrist };
-    this.prevTimestamp = now;
+    const isTransition = this.smoothedMotion > 0.045;
 
     if (isPointingDown || isAtBottomEdge) {
-      // Clear history buffer so lingering letters don't trigger
       this.history = [];
       return {
         letter: '',
         confidence: 0,
         top3: [],
-        gestureDescription: 'Hand resting / lowered (Recognition paused)',
+        gestureDescription: 'Hand resting / lowered (Ready to resume)',
         isStable: false,
         isResting: true,
-        isTransition,
+        isTransition: false,
+        motionVelocity: this.smoothedMotion,
+        isStill: false,
       };
     }
 
@@ -137,12 +128,37 @@ export class ASLLandmarkClassifier {
         letter: '',
         confidence: 0,
         top3: [],
-        gestureDescription: 'Moving hand transition...',
+        gestureDescription: 'Adjusting hand shape... hold still when ready',
         isStable: false,
         isResting: false,
         isTransition: true,
+        motionVelocity: this.smoothedMotion,
+        isStill: false,
       };
     }
+
+    // Complete Joint Anatomical Definitions
+    const thumbIP = landmarks[3];
+    const thumbMCP = landmarks[2];
+    const thumbCMC = landmarks[1];
+
+    const indexDIP = landmarks[7];
+    const indexPIP = landmarks[6];
+    const indexMCP = landmarks[5];
+
+    const middleDIP = landmarks[11];
+    const middlePIP = landmarks[10];
+
+    const ringDIP = landmarks[15];
+    const ringPIP = landmarks[14];
+    const ringMCP = landmarks[13];
+
+    const pinkyDIP = landmarks[19];
+    const pinkyPIP = landmarks[18];
+    const pinkyMCP = landmarks[17];
+
+    // Palm scale metric: distance from wrist to middle MCP
+    const palmSize = Math.max(0.01, dist(wrist, middleMCP));
 
     // -------------------------------------------------------------
     // 2. FORGIVING ANATOMICAL METRICS
@@ -373,6 +389,8 @@ export class ASLLandmarkClassifier {
       isStable,
       isResting: false,
       isTransition: false,
+      motionVelocity: this.smoothedMotion,
+      isStill,
     };
   }
 

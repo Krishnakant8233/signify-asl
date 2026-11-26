@@ -121,10 +121,14 @@ export class ASLWordClassifier {
     const kinematicRes = this.classifyByKinematics(trajectoryMagnitude);
 
     // If backend LSTM returned high-confidence candidate, blend with kinematics
-    if (this.cachedBackendPred && this.cachedBackendPred.confidence >= 65.0) {
-      const topWords = this.cachedBackendPred.top3 || [];
+    if (this.cachedBackendPred && this.cachedBackendPred.confidence >= 60.0) {
+      const predWord = this.cachedBackendPred.word === 'THANK_YOU' ? 'THANK YOU' : this.cachedBackendPred.word;
+      const topWords = (this.cachedBackendPred.top3 || []).map((t: any) => ({
+        word: t.word === 'THANK_YOU' ? 'THANK YOU' : t.word,
+        confidence: t.confidence
+      }));
       return {
-        word: this.cachedBackendPred.word,
+        word: predWord,
         confidence: Math.round(this.cachedBackendPred.confidence * 10) / 10,
         top3: topWords.length > 0 ? topWords : kinematicRes.top3,
         description: this.cachedBackendPred.description || kinematicRes.description,

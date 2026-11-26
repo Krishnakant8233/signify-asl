@@ -99,9 +99,9 @@ export const LiveRecognition: React.FC = () => {
   const [showWordGuide, setShowWordGuide] = useState<boolean>(false);
   const wordVotesRef = useRef<Record<string, number>>({});
 
-  // Timing Constants: 3s hold to predict, 2s cooldown to relax hand / take hand down
+  // Timing Constants: 3s hold to predict, 3s cooldown to relax hand / take hand down
   const HOLD_DURATION_MS = 3000;
-  const COOLDOWN_DURATION_MS = 2000;
+  const COOLDOWN_DURATION_MS = 3000;
 
   // Refs for high-speed animation/video frames & duplicate prevention
   const frameCountRef = useRef(0);
@@ -416,10 +416,10 @@ export const LiveRecognition: React.FC = () => {
         const classification = aslClassifier.classify(landmarks);
         setResult(classification);
 
-        // If hand is resting, lowered, or moving fast:
+        // If hand is resting, lowered, or moving/adjusting:
         if (classification.isResting || classification.isTransition || !classification.letter) {
           if (cycleStateRef.current === 'HOLDING') {
-            // Hand dropped during hold: safely reset
+            // Hand moved or dropped during hold: safely reset
             cycleStateRef.current = 'IDLE';
             setPhase('IDLE');
             setHoldProgress(0);
@@ -436,7 +436,22 @@ export const LiveRecognition: React.FC = () => {
         // Active sign detected: cancel hand-drop auto-space timer
         cancelHandDropAutoSpacing();
 
-        // 3. 3-Second Hold Capture State Machine
+        // 3. HAND STILLNESS GATE:
+        // Do NOT start or progress timer if hand is still moving or adjusting!
+        // Wait until user holds hand steady (classification.isStill is true)
+        if (!classification.isStill) {
+          if (cycleStateRef.current === 'HOLDING') {
+            // If hand began moving significantly during hold, pause/reset hold
+            cycleStateRef.current = 'IDLE';
+            setPhase('IDLE');
+            setHoldProgress(0);
+            setHoldRemainingSeconds(3.0);
+            sampleVotesRef.current = {};
+          }
+          return;
+        }
+
+        // 4. 3-Second Hold Capture State Machine (Only runs when hand is STILL and FIXED)
         if (cycleStateRef.current === 'IDLE') {
           // Begin 3-second hold window
           cycleStateRef.current = 'HOLDING';
@@ -446,7 +461,7 @@ export const LiveRecognition: React.FC = () => {
           setHoldProgress(0);
           setHoldRemainingSeconds(3.0);
         } else if (cycleStateRef.current === 'HOLDING') {
-          // Accumulate predictions across the 3-second window
+          // Accumulate predictions across the 3-second window while hand remains still
           sampleVotesRef.current[classification.letter] = (sampleVotesRef.current[classification.letter] || 0) + 1;
 
           const elapsed = now - holdStartRef.current;
@@ -479,12 +494,12 @@ export const LiveRecognition: React.FC = () => {
               setCurrentWord(currentWordRef.current);
             }
 
-            // Immediately enter 2-Second Cooldown Phase (NO INPUTS ACCEPTED)
+            // Immediately enter 3-Second Cooldown Phase (NO INPUTS ACCEPTED - USER CAN TAKE HAND DOWN)
             cycleStateRef.current = 'COOLDOWN';
             cooldownStartRef.current = now;
             setPhase('COOLDOWN');
             setCooldownProgress(0);
-            setCooldownRemainingSeconds(2.0);
+            setCooldownRemainingSeconds(3.0);
             setHoldProgress(100);
             sampleVotesRef.current = {};
           }

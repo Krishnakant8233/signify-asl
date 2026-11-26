@@ -460,10 +460,22 @@ export const WordGestureVisualGuide: React.FC<WordGestureVisualGuideProps> = ({ 
                   : 'bg-gray-950/80 border-gray-800 hover:border-cyan-500/40 hover:bg-gray-900/60'
               }`}
             >
-              {/* Graphic Illustration */}
+              {/* Graphic Illustration with Real Signer Photo / SVG fallback */}
               <div className="flex flex-col items-center">
-                <div className="w-20 h-20 rounded-xl bg-gray-900/60 border border-gray-800/80 flex items-center justify-center p-1 group-hover:scale-105 transition-transform">
-                  <GestureIllustration type={item.svgType} className="w-full h-full" />
+                <div className="relative w-24 h-24 rounded-xl bg-gray-900/80 border border-gray-800/80 overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform">
+                  <img
+                    src={`/word_guides/${item.word === 'THANK YOU' ? 'THANK_YOU' : item.word}.jpg`}
+                    alt={`Real ASL signer for ${item.word}`}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback to SVG on missing image
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                  {/* Subtle corner badge for photo */}
+                  <div className="absolute top-1 right-1 bg-black/60 backdrop-blur-xs px-1 py-0.5 rounded text-[8px] font-mono text-cyan-300 pointer-events-none">
+                    Real Sign
+                  </div>
                 </div>
 
                 {/* Word Label & Badges */}
