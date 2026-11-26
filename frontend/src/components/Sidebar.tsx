@@ -28,9 +28,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'live', label: 'Live Recognition', icon: Camera, badge: 'LIVE' },
     { id: 'sentence', label: 'Sentence Builder', icon: MessageSquareText },
     { id: 'dataset', label: 'Dataset Explorer', icon: Database },
-    { id: 'training', label: 'Model Training', icon: Cpu },
-    { id: 'evaluation', label: 'Model Evaluation', icon: BarChart3 },
-    { id: 'history', label: 'Recognition History', icon: History },
     { id: 'speech', label: 'Speech Settings', icon: Volume2 },
   ];
 

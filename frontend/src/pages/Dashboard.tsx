@@ -76,11 +76,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
-              onClick={() => onNavigate('training')}
+              onClick={() => onNavigate('sentence')}
               className="inline-flex items-center space-x-2 px-5 py-2.5 rounded-xl bg-gray-800/80 hover:bg-gray-700 text-gray-200 font-medium text-sm border border-gray-700 transition-all cursor-pointer"
             >
-              <Cpu className="w-4 h-4 text-blue-400" />
-              <span>Inspect Architecture & Training</span>
+              <MessageSquareText className="w-4 h-4 text-blue-400" />
+              <span>Open Sentence Builder</span>
             </button>
           </div>
         </div>
@@ -89,8 +89,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
         <div className="absolute right-0 top-0 bottom-0 w-1/3 bg-gradient-to-l from-blue-600/10 to-transparent pointer-events-none" />
       </div>
 
-      {/* Real Backend Status Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* System Status Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Model Card */}
         <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800/80 hover:border-gray-700 transition-all shadow-sm">
           <div className="flex items-center justify-between">
@@ -123,42 +123,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
             </div>
             <p className="text-xs text-gray-400 mt-1">
               ASL Alphabet RGB Dataset
-            </p>
-          </div>
-        </div>
-
-        {/* Test Accuracy Card */}
-        <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800/80 hover:border-gray-700 transition-all shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Model Accuracy</span>
-            <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-white">
-              {meta?.test_accuracy ? `${(meta.test_accuracy * 100).toFixed(1)}%` : 'Trained CNN'}
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Evaluated on Independent Test Split
-            </p>
-          </div>
-        </div>
-
-        {/* Voice System Card */}
-        <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800/80 hover:border-gray-700 transition-all shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Voice Synthesis</span>
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400">
-              <Volume2 className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="mt-3">
-            <div className="text-2xl font-bold text-white">
-              Auto TTS Active
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Web Speech API (Keyless & Free)
             </p>
           </div>
         </div>
