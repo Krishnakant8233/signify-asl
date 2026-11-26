@@ -89,6 +89,8 @@ export class HandDetectorService {
   }
 
   private currentStream: MediaStream | null = null;
+  private isRunning: boolean = false;
+  private animFrameId: number | null = null;
 
   public setListener(callback: (landmarks: Landmark[] | null) => void) {
     this.onResultsCallback = callback;
@@ -102,53 +104,97 @@ export class HandDetectorService {
   ): Promise<void> {
     await this.init();
 
+    // 1. Fully release previous stream and stop running loops
     this.stop();
 
     try {
-      // 1. Direct getUserMedia with explicit facingMode for reliable mobile front/rear camera selection
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: { ideal: facingMode },
-          width: { ideal: width },
-          height: { ideal: height },
-        },
-        audio: false,
+      // 2. Select camera constraints with mobile device enumeration support
+      let videoConstraint: any = {
+        width: { ideal: width },
+        height: { ideal: height },
       };
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter((d) => d.kind === 'videoinput');
+
+        if (videoDevices.length > 1) {
+          if (facingMode === 'environment') {
+            const backCam = videoDevices.find(
+              (d) =>
+                d.label.toLowerCase().includes('back') ||
+                d.label.toLowerCase().includes('rear') ||
+                d.label.toLowerCase().includes('environment')
+            );
+            if (backCam && backCam.deviceId) {
+              videoConstraint.deviceId = { exact: backCam.deviceId };
+            } else {
+              videoConstraint.facingMode = { ideal: 'environment' };
+            }
+          } else {
+            const frontCam = videoDevices.find(
+              (d) =>
+                d.label.toLowerCase().includes('front') ||
+                d.label.toLowerCase().includes('user')
+            );
+            if (frontCam && frontCam.deviceId) {
+              videoConstraint.deviceId = { exact: frontCam.deviceId };
+            } else {
+              videoConstraint.facingMode = { ideal: 'user' };
+            }
+          }
+        } else {
+          videoConstraint.facingMode = { ideal: facingMode };
+        }
+      } catch (e) {
+        videoConstraint.facingMode = { ideal: facingMode };
+      }
+
+      // 3. Request camera stream
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraint,
+          audio: false,
+        });
+      } catch (err) {
+        // Fallback to basic facingMode constraint if exact deviceId failed
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: false,
+        });
+      }
+
       this.currentStream = stream;
       videoElement.srcObject = stream;
+      videoElement.setAttribute('playsinline', 'true');
       await videoElement.play();
 
-      if (window.Camera) {
-        this.camera = new window.Camera(videoElement, {
-          onFrame: async () => {
-            if (this.hands && videoElement.readyState >= 2) {
-              try {
-                await this.hands.send({ image: videoElement });
-              } catch (err) {
-                // Ignore transient frame errors
-              }
-            }
-          },
-          width,
-          height,
-        });
-        await this.camera.start();
-        console.log(`[HandDetector] Camera started (${facingMode}) with MediaPipe.`);
-      } else {
-        const loop = async () => {
-          if (this.hands && videoElement.readyState >= 2) {
-            try {
-              await this.hands.send({ image: videoElement });
-            } catch (e) {}
+      this.isRunning = true;
+
+      // 4. Smooth, non-blocking MediaPipe inference frame loop
+      let isProcessing = false;
+      const processLoop = async () => {
+        if (!this.isRunning) return;
+
+        if (this.hands && videoElement.readyState >= 2 && !isProcessing) {
+          isProcessing = true;
+          try {
+            await this.hands.send({ image: videoElement });
+          } catch (err) {
+            // Ignore transient frame skips
+          } finally {
+            isProcessing = false;
           }
-          if (videoElement.srcObject) {
-            requestAnimationFrame(loop);
-          }
-        };
-        requestAnimationFrame(loop);
-      }
+        }
+
+        if (this.isRunning) {
+          this.animFrameId = requestAnimationFrame(processLoop);
+        }
+      };
+
+      this.animFrameId = requestAnimationFrame(processLoop);
+      console.log(`[HandDetector] Camera active (${facingMode}), loop running.`);
     } catch (err) {
       console.error('[HandDetector] Camera acquisition failed:', err);
       throw err;
@@ -156,6 +202,11 @@ export class HandDetectorService {
   }
 
   public stop(): void {
+    this.isRunning = false;
+    if (this.animFrameId) {
+      cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
+    }
     if (this.camera) {
       try {
         this.camera.stop();

@@ -1,6 +1,6 @@
 {
   "model_name": "ASL Assistive Report CNN",
-  "weights_path": "D:\\ML Project\\models_saved\\asl_cnn_final.keras",
+  "weights_path": "models_saved/asl_cnn_final.keras",
   "classes": [
     "A",
     "B",

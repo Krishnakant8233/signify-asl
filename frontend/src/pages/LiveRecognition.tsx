@@ -333,23 +333,25 @@ export const LiveRecognition: React.FC = () => {
 
             if (cycleStateRef.current === 'COOLDOWN') return;
 
-            if (wRes.word && wRes.confidence >= 60.0) {
+            const targetWordDuration = 1200; // 1.2s gesture hold for dynamic single-sign words
+
+            if (wRes.word && wRes.confidence >= 65.0) {
               if (cycleStateRef.current === 'IDLE') {
                 cycleStateRef.current = 'HOLDING';
                 holdStartRef.current = now;
                 wordVotesRef.current = { [wRes.word]: 1 };
                 setPhase('HOLDING');
                 setHoldProgress(0);
-                setHoldRemainingSeconds(3.0);
+                setHoldRemainingSeconds(1.2);
               } else if (cycleStateRef.current === 'HOLDING') {
                 wordVotesRef.current[wRes.word] = (wordVotesRef.current[wRes.word] || 0) + 1;
                 const elapsed = now - holdStartRef.current;
-                const progress = Math.min(100, Math.round((elapsed / HOLD_DURATION_MS) * 100));
-                const remaining = Math.max(0, Math.round((HOLD_DURATION_MS - elapsed) / 100) / 10);
+                const progress = Math.min(100, Math.round((elapsed / targetWordDuration) * 100));
+                const remaining = Math.max(0, Math.round((targetWordDuration - elapsed) / 100) / 10);
                 setHoldProgress(progress);
                 setHoldRemainingSeconds(remaining);
 
-                if (elapsed >= HOLD_DURATION_MS) {
+                if (elapsed >= targetWordDuration) {
                   const votes = wordVotesRef.current;
                   let winnerWord = wRes.word;
                   let maxV = 0;
@@ -385,14 +387,6 @@ export const LiveRecognition: React.FC = () => {
                   aslWordClassifier.clearBuffer();
                 }
               }
-            } else {
-              if (cycleStateRef.current === 'HOLDING') {
-                cycleStateRef.current = 'IDLE';
-                setPhase('IDLE');
-                setHoldProgress(0);
-                setHoldRemainingSeconds(3.0);
-                wordVotesRef.current = {};
-              }
             }
           });
         } else {
@@ -403,7 +397,7 @@ export const LiveRecognition: React.FC = () => {
             cycleStateRef.current = 'IDLE';
             setPhase('IDLE');
             setHoldProgress(0);
-            setHoldRemainingSeconds(3.0);
+            setHoldRemainingSeconds(1.2);
             wordVotesRef.current = {};
           }
         }
@@ -944,7 +938,7 @@ export const LiveRecognition: React.FC = () => {
               <div className="space-y-1 my-2">
                 <div className="flex justify-between text-[11px] text-gray-400">
                   <span className="text-cyan-300 font-semibold">
-                    {recognitionMode === 'word' ? 'Sign Hold Progress (3.0s Hold)' : 'Hold Progress (3.0s Hold)'}
+                    {recognitionMode === 'word' ? 'Sign Gesture Hold (1.2s Hold)' : 'Hold Progress (3.0s Hold)'}
                   </span>
                   <span className="font-mono text-cyan-400 font-bold">{holdRemainingSeconds.toFixed(1)}s left</span>
                 </div>

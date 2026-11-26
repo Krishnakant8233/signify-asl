@@ -29,6 +29,10 @@ app.add_middleware(
 # Mount API routes
 app.include_router(router, prefix="/api")
 
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "Signify ASL Recognition"}
+
 # Initialize database tables on module load and startup
 init_db()
 

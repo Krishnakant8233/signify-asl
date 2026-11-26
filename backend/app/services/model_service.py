@@ -44,7 +44,15 @@ class ModelService:
             try:
                 with open(self.model_metadata_file, "r") as f:
                     meta = json.load(f)
-                weights_path = Path(meta.get("weights_path", ""))
+                raw_path = meta.get("weights_path", "")
+                weights_path = Path(raw_path)
+                
+                # Resilient fallback across Windows/Linux/Docker
+                if not weights_path.exists():
+                    weights_path = self.models_dir / weights_path.name
+                if not weights_path.exists():
+                    weights_path = self.models_dir / "asl_cnn_final.keras"
+
                 if weights_path.exists():
                     import tensorflow as tf
                     self.active_model = tf.keras.models.load_model(str(weights_path))
