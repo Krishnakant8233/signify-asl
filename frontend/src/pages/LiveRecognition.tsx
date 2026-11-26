@@ -65,12 +65,12 @@ export const LiveRecognition: React.FC = () => {
   const [handDetected, setHandDetected] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(0);
 
-  // 2s Hold & 1s Cooldown State Machine
+  // 3s Hold & 2s Cooldown State Machine
   const [phase, setPhase] = useState<CyclePhase>('IDLE');
   const [holdProgress, setHoldProgress] = useState<number>(0);
-  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(2.0);
+  const [holdRemainingSeconds, setHoldRemainingSeconds] = useState<number>(3.0);
   const [cooldownProgress, setCooldownProgress] = useState<number>(0);
-  const [cooldownRemainingSeconds, setCooldownRemainingSeconds] = useState<number>(1.0);
+  const [cooldownRemainingSeconds, setCooldownRemainingSeconds] = useState<number>(2.0);
   const [lastCommittedChar, setLastCommittedChar] = useState<string>('');
 
   // Auto-Spacing on Hand Drop / Rest (Silent)
@@ -88,9 +88,9 @@ export const LiveRecognition: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
 
-  // Timing Constants: 2s hold to predict, 1s cooldown to relax hand/transition
-  const HOLD_DURATION_MS = 2000;
-  const COOLDOWN_DURATION_MS = 1000;
+  // Timing Constants: 3s hold to predict, 2s cooldown to relax hand / take hand down
+  const HOLD_DURATION_MS = 3000;
+  const COOLDOWN_DURATION_MS = 2000;
 
   // Refs for high-speed animation/video frames & duplicate prevention
   const frameCountRef = useRef(0);
@@ -310,7 +310,7 @@ export const LiveRecognition: React.FC = () => {
             cycleStateRef.current = 'IDLE';
             setPhase('IDLE');
             setHoldProgress(0);
-            setHoldRemainingSeconds(2.0);
+            setHoldRemainingSeconds(3.0);
             sampleVotesRef.current = {};
           }
 
@@ -323,17 +323,17 @@ export const LiveRecognition: React.FC = () => {
         // Active sign detected: cancel hand-drop auto-space timer
         cancelHandDropAutoSpacing();
 
-        // 3. 2-Second Hold Capture State Machine
+        // 3. 3-Second Hold Capture State Machine
         if (cycleStateRef.current === 'IDLE') {
-          // Begin 2-second hold window
+          // Begin 3-second hold window
           cycleStateRef.current = 'HOLDING';
           holdStartRef.current = now;
           sampleVotesRef.current = { [classification.letter]: 1 };
           setPhase('HOLDING');
           setHoldProgress(0);
-          setHoldRemainingSeconds(2.0);
+          setHoldRemainingSeconds(3.0);
         } else if (cycleStateRef.current === 'HOLDING') {
-          // Accumulate predictions across the 2-second window
+          // Accumulate predictions across the 3-second window
           sampleVotesRef.current[classification.letter] = (sampleVotesRef.current[classification.letter] || 0) + 1;
 
           const elapsed = now - holdStartRef.current;
@@ -343,9 +343,9 @@ export const LiveRecognition: React.FC = () => {
           setHoldProgress(progress);
           setHoldRemainingSeconds(remaining);
 
-          // Once held for 2.0 full seconds: PREDICT WHAT WAS SAID & LOCK IN
+          // Once held for 3.0 full seconds: PREDICT WHAT WAS SAID & LOCK IN
           if (elapsed >= HOLD_DURATION_MS) {
-            // Find winning character with highest votes during the 2s window
+            // Find winning character with highest votes during the 3s window
             const votes = sampleVotesRef.current;
             let winner = classification.letter;
             let maxVotes = 0;
@@ -366,12 +366,12 @@ export const LiveRecognition: React.FC = () => {
               setCurrentWord(currentWordRef.current);
             }
 
-            // Immediately enter 1-Second Cooldown Phase
+            // Immediately enter 2-Second Cooldown Phase (NO INPUTS ACCEPTED)
             cycleStateRef.current = 'COOLDOWN';
             cooldownStartRef.current = now;
             setPhase('COOLDOWN');
             setCooldownProgress(0);
-            setCooldownRemainingSeconds(1.0);
+            setCooldownRemainingSeconds(2.0);
             setHoldProgress(100);
             sampleVotesRef.current = {};
           }
@@ -385,7 +385,7 @@ export const LiveRecognition: React.FC = () => {
           cycleStateRef.current = 'IDLE';
           setPhase('IDLE');
           setHoldProgress(0);
-          setHoldRemainingSeconds(2.0);
+          setHoldRemainingSeconds(3.0);
           sampleVotesRef.current = {};
         }
 
@@ -500,7 +500,7 @@ export const LiveRecognition: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-1">
-            2s hold to lock • 1s cooldown • Single-word guaranteed (no duplicate words) • Front/rear camera support
+            3s hold to predict • 2s cooldown to take hand down (no inputs accepted) • Single-word guaranteed
           </p>
         </div>
 
@@ -682,14 +682,14 @@ export const LiveRecognition: React.FC = () => {
                 {phase === 'HOLDING' && (
                   <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-2xl bg-cyan-600/90 text-white text-xs font-bold shadow-2xl backdrop-blur-md flex items-center space-x-2 border border-white/20 whitespace-nowrap">
                     <Clock className="w-4 h-4 text-white animate-spin" />
-                    <span>Predicting in {holdRemainingSeconds.toFixed(1)}s</span>
+                    <span>Predicting in {holdRemainingSeconds.toFixed(1)}s — keep holding sign</span>
                   </div>
                 )}
 
                 {phase === 'COOLDOWN' && (
                   <div className="absolute top-16 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-2xl bg-amber-600/90 text-white text-xs font-bold shadow-2xl backdrop-blur-md flex items-center space-x-2 border border-white/20 whitespace-nowrap">
                     <RotateCcw className="w-4 h-4 text-white animate-spin" />
-                    <span>Cool-down ({cooldownRemainingSeconds.toFixed(1)}s) — relax hand</span>
+                    <span>Cool-down ({cooldownRemainingSeconds.toFixed(1)}s) — take hand down / relax (no inputs)</span>
                   </div>
                 )}
 
@@ -706,13 +706,13 @@ export const LiveRecognition: React.FC = () => {
           <div className="text-[11px] text-gray-400 px-2 flex items-center justify-between">
             <span className="flex items-center space-x-1.5">
               <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Camera: {facingMode === 'user' ? 'Front' : 'Rear'} • Single-Word Guarantee</span>
+              <span>Camera: {facingMode === 'user' ? 'Front' : 'Rear'} • 3s Hold / 2s Cooldown</span>
             </span>
             <span className="text-cyan-400 font-semibold">Press Enter to Translate</span>
           </div>
         </div>
 
-        {/* Right: Detected Sign, 2s Hold & 1s Cooldown Progress Cards (5 Cols) */}
+        {/* Right: Detected Sign, 3s Hold & 2s Cooldown Progress Cards (5 Cols) */}
         <div className="lg:col-span-5 space-y-4 flex flex-col justify-between">
           {/* Large Letter Card */}
           <div className="p-6 rounded-3xl bg-[#111827] border border-gray-800 shadow-xl relative overflow-hidden">
@@ -721,7 +721,7 @@ export const LiveRecognition: React.FC = () => {
                 Live Detected Sign
               </span>
               <span className="text-[10px] text-gray-500 font-mono">
-                {phase === 'HOLDING' ? 'SAMPLING 2s' : phase === 'COOLDOWN' ? 'COOLDOWN 1s' : 'READY'}
+                {phase === 'HOLDING' ? 'SAMPLING 3s' : phase === 'COOLDOWN' ? 'COOLDOWN 2s' : 'READY'}
               </span>
             </div>
 
@@ -773,11 +773,11 @@ export const LiveRecognition: React.FC = () => {
               </div>
             </div>
 
-            {/* Progress Bars: 2s Hold & 1s Cooldown */}
+            {/* Progress Bars: 3s Hold & 2s Cooldown */}
             {phase === 'HOLDING' && (
               <div className="space-y-1 my-2">
                 <div className="flex justify-between text-[11px] text-gray-400">
-                  <span className="text-cyan-300 font-semibold">Hold Progress (2.0s Hold)</span>
+                  <span className="text-cyan-300 font-semibold">Hold Progress (3.0s Hold)</span>
                   <span className="font-mono text-cyan-400 font-bold">{holdRemainingSeconds.toFixed(1)}s left</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-gray-950 border border-cyan-500/30 overflow-hidden">
@@ -792,7 +792,7 @@ export const LiveRecognition: React.FC = () => {
             {phase === 'COOLDOWN' && (
               <div className="space-y-1 my-2">
                 <div className="flex justify-between text-[11px] text-gray-400">
-                  <span className="text-amber-300 font-semibold">Cool-down Progress (1.0s)</span>
+                  <span className="text-amber-300 font-semibold">Cool-down (2.0s) — Take Hand Down / Relax</span>
                   <span className="font-mono text-amber-400 font-bold">{cooldownRemainingSeconds.toFixed(1)}s left</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-gray-950 border border-amber-500/30 overflow-hidden">
@@ -806,7 +806,7 @@ export const LiveRecognition: React.FC = () => {
 
             {phase === 'IDLE' && (
               <div className="space-y-1 my-2 text-[11px] text-gray-400">
-                <span>Hold any sign steadily for 2 seconds to predict letter</span>
+                <span>Hold any sign steadily for 3 seconds to predict letter</span>
                 <div className="h-2 rounded-full bg-gray-950 border border-gray-800" />
               </div>
             )}
@@ -816,7 +816,7 @@ export const LiveRecognition: React.FC = () => {
               <div className="text-[10px] font-bold text-gray-500 uppercase">Gesture Analysis</div>
               <div className="font-semibold text-white mt-0.5">
                 {phase === 'COOLDOWN'
-                  ? 'Cool-down active: lower or relax hand, or prepare next sign'
+                  ? 'Cool-down active: lower or relax hand without taking any inputs'
                   : result?.gestureDescription || 'Position hand in front of camera to begin'}
               </div>
             </div>
