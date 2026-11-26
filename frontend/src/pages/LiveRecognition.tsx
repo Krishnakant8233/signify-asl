@@ -26,6 +26,7 @@ import { aslClassifier, ClassificationResult } from '../services/aslClassifier';
 import { aslWordClassifier, WordClassificationResult } from '../services/aslWordClassifier';
 import { speechService } from '../services/speech';
 import { api } from '../services/api';
+import { WordGestureVisualGuide, GestureIllustration } from '../components/WordGestureVisualGuide';
 
 // Reference guide data for ASL letters
 const ASL_GUIDE: Record<string, string> = {
@@ -872,7 +873,15 @@ export const LiveRecognition: React.FC = () => {
 
             {/* Giant Letter or Word & High Confidence Display */}
             <div className="flex items-center justify-between my-2">
-              <div className="flex items-baseline space-x-4">
+              <div className="flex items-center space-x-3.5">
+                {recognitionMode === 'word' && (phase === 'COOLDOWN' ? lastCommittedWord : wordResult?.word) && (
+                  <div className="w-16 h-16 rounded-2xl bg-cyan-950/70 border border-cyan-500/40 p-1 shrink-0 flex items-center justify-center shadow-lg shadow-cyan-500/10">
+                    <GestureIllustration
+                      type={(phase === 'COOLDOWN' ? lastCommittedWord : wordResult?.word || '').toLowerCase().replace(/[\s-]+/g, '')}
+                      className="w-full h-full"
+                    />
+                  </div>
+                )}
                 <div className={`${recognitionMode === 'word' ? 'text-4xl sm:text-5xl' : 'text-8xl'} font-black tracking-tight text-white font-mono bg-gradient-to-br from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent break-all`}>
                   {recognitionMode === 'word'
                     ? phase === 'COOLDOWN'
@@ -1057,6 +1066,21 @@ export const LiveRecognition: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Mode 2 Interactive Visual Gesture Guide with Illustrated Poses & Motion Arrows */}
+      {recognitionMode === 'word' && (
+        <WordGestureVisualGuide
+          activeDetectedWord={phase === 'COOLDOWN' ? lastCommittedWord : wordResult?.word}
+          onSelectWord={(selectedWord) => {
+            setSentence((prev) => {
+              const words = prev.trim().split(/\s+/).filter(Boolean);
+              if (words.length > 0 && words[words.length - 1] === selectedWord) return prev;
+              return prev ? `${prev} ${selectedWord}` : selectedWord;
+            });
+            speechService.speakText(selectedWord);
+          }}
+        />
+      )}
 
       {/* Auto-Spacing Notification Banner */}
       {autoSpaceCountdown !== null && currentWord && (
@@ -1300,20 +1324,28 @@ export const LiveRecognition: React.FC = () => {
                   });
                   speechService.speakText(item.word);
                 }}
-                className="p-3.5 rounded-2xl bg-gray-950 border border-gray-800 hover:border-cyan-500/50 hover:bg-cyan-950/20 transition-all cursor-pointer group space-y-1.5"
+                className="p-3.5 rounded-2xl bg-gray-950 border border-gray-800 hover:border-cyan-500/50 hover:bg-cyan-950/20 transition-all cursor-pointer group space-y-2 flex flex-col justify-between"
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-extrabold text-white font-mono group-hover:text-cyan-300">
-                    {item.word}
+                <div>
+                  <div className="w-full h-20 rounded-xl bg-gray-900/60 border border-gray-800/80 p-1 flex items-center justify-center mb-2">
+                    <GestureIllustration
+                      type={(item.word || '').toLowerCase().replace(/[\s-]+/g, '')}
+                      className="w-full h-full"
+                    />
                   </div>
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-                    {item.two_handed === 'Yes' || item.two_handed === 'Yes (Bimanual)' ? 'Bimanual' : 'Single Hand'}
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-extrabold text-white font-mono group-hover:text-cyan-300">
+                      {item.word}
+                    </div>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      {item.two_handed === 'Yes' || item.two_handed === 'Yes (Bimanual)' ? 'Bimanual' : 'Single Hand'}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-gray-300 leading-snug mt-1">
+                    {item.description}
+                  </div>
                 </div>
-                <div className="text-[11px] text-gray-300 leading-snug">
-                  {item.description}
-                </div>
-                <div className="text-[10px] text-gray-500">
+                <div className="text-[10px] text-gray-500 border-t border-gray-900 pt-1">
                   <span className="text-gray-400 font-semibold">Shape:</span> {item.handshape}
                 </div>
               </div>
