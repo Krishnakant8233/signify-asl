@@ -12,6 +12,24 @@ Built as an academic capstone application, this project faithfully implements th
 
 ---
 
+## Dual Recognition Modes
+
+1. **Mode A: Alphabet Recognition (A–Z Fingerspelling)**:
+   - Recognizes individual ASL alphabet letters (A–Z).
+   - Uses the 3-stage CNN model trained on 10,873 verified ASL alphabet images.
+   - 3-second hold to predict, 2-second cooldown to relax hand / prevent repetition.
+   - Character-by-character spelling with auto-spacing and predictive suggestions.
+
+2. **Mode B: Complete Word Recognition (Single-Sign ASL)**:
+   - Recognizes complete everyday ASL words directly from a single sign gesture or movement sequence.
+   - Example: Signing **HELLO** predicts the complete word **HELLO** immediately without spelling H-E-L-L-O.
+   - Target vocabulary (20 classes): `HELLO`, `THANK YOU`, `PLEASE`, `SORRY`, `YES`, `NO`, `HELP`, `WATER`, `FOOD`, `LOVE`, `GOOD`, `BAD`, `FRIEND`, `GOODBYE`, `MORE`, `STOP`, `EAT`, `DRINK`, `HAPPY`, `SAD`.
+   - Trained on genuine public ASL video sequences from **WLASL (Word-Level American Sign Language)** via Hugging Face (`Voxel51/WLASL`).
+   - Uses a **Bidirectional LSTM** operating on 30-frame temporal landmark sequences ($30 \times 126$ spatial features from dual hands).
+   - Directly appends recognized words to sentences and speaks complete words via text-to-speech.
+
+---
+
 ## Key Features
 
 1. **Academic Report CNN Architecture**:

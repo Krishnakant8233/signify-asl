@@ -19,6 +19,9 @@ frontend/dist/
 # Large Datasets (keep repo lean for GitHub & Render)
 dataset/raw/
 dataset/splits/
+dataset/words/videos/
+dataset/words/features/
+dataset/words/splits/
 temp_asl.parquet
 
 # Database

@@ -34,12 +34,14 @@ echo.
 :: 3. Options Menu
 echo Select Startup Option:
 echo [1] Start Complete Application (FastAPI Backend + Vite Frontend)
-echo [2] Download/Prepare ASL Dataset
-echo [3] Train CNN Model
+echo [2] Download/Prepare ASL Alphabet Dataset
+echo [3] Train CNN Alphabet Model
 echo [4] Install All Dependencies (Python pip + npm)
 echo [5] Run Automated System Verification Tests
+echo [6] Download & Prepare Word-Level ASL Dataset (WLASL)
+echo [7] Train Word-Level Sequence Model (Bi-LSTM)
 echo.
-set /p OPT="Enter option [1-5] (Default: 1): "
+set /p OPT="Enter option [1-7] (Default: 1): "
 if "%OPT%"=="" set OPT=1
 
 if "%OPT%"=="4" (
@@ -56,7 +58,7 @@ if "%OPT%"=="4" (
 
 if "%OPT%"=="2" (
     echo.
-    echo Running automated dataset download and preparation...
+    echo Running automated alphabet dataset download and preparation...
     python prepare_dataset_cli.py
     pause
     exit /b 0
@@ -64,8 +66,24 @@ if "%OPT%"=="2" (
 
 if "%OPT%"=="3" (
     echo.
-    echo Training CNN model following academic report...
+    echo Training CNN alphabet model...
     python train_model_cli.py
+    pause
+    exit /b 0
+)
+
+if "%OPT%"=="6" (
+    echo.
+    echo Downloading and extracting 30-frame landmark sequences for 20 ASL word classes...
+    python scripts/prepare_word_dataset.py
+    pause
+    exit /b 0
+)
+
+if "%OPT%"=="7" (
+    echo.
+    echo Training Bidirectional LSTM sequence model for ASL words...
+    python scripts/train_word_model.py
     pause
     exit /b 0
 )

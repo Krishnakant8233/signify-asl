@@ -23,13 +23,16 @@ import { api } from '../services/api';
 import { DatasetStatus, DatasetStats } from '../types';
 
 export const DatasetExplorer: React.FC = () => {
+  const [activeDatasetTab, setActiveDatasetTab] = useState<'alphabet' | 'words'>('alphabet');
   const [status, setStatus] = useState<DatasetStatus | null>(null);
+  const [wordsVocab, setWordsVocab] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [downloading, setDownloading] = useState<boolean>(false);
   const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetchDatasetInfo();
+    api.getWordsVocabulary().then(setWordsVocab).catch(() => {});
   }, []);
 
   const fetchDatasetInfo = async () => {
@@ -84,14 +87,36 @@ export const DatasetExplorer: React.FC = () => {
           </div>
         </div>
 
-        <button
-          onClick={fetchDatasetInfo}
-          disabled={loading}
-          className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold border border-gray-700 transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Stats</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Dataset Selector */}
+          <div className="flex items-center p-1 bg-gray-950 border border-gray-800 rounded-xl">
+            <button
+              onClick={() => setActiveDatasetTab('alphabet')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeDatasetTab === 'alphabet' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Alphabet (A–Z)
+            </button>
+            <button
+              onClick={() => setActiveDatasetTab('words')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeDatasetTab === 'words' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Word Signs (WLASL)
+            </button>
+          </div>
+
+          <button
+            onClick={fetchDatasetInfo}
+            disabled={loading}
+            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold border border-gray-700 transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {downloadMessage && (
@@ -106,8 +131,97 @@ export const DatasetExplorer: React.FC = () => {
         </div>
       )}
 
-      {/* Dataset Overview Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {activeDatasetTab === 'words' ? (
+        /* Word Sign Dataset (WLASL) View */
+        <div className="space-y-6">
+          {/* Word Overview Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Video Samples</div>
+              <div className="text-2xl font-bold text-white mt-2">156 Videos</div>
+              <p className="text-[11px] text-emerald-400 mt-1 flex items-center space-x-1">
+                <CheckCircle className="w-3.5 h-3.5" />
+                <span>Downloaded from WLASL Catalog</span>
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Target Vocabulary</div>
+              <div className="text-2xl font-bold text-cyan-400 mt-2 font-mono">20 Words</div>
+              <p className="text-[11px] text-gray-400 mt-1">HELLO, THANK YOU, PLEASE, WATER, etc.</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Temporal Window</div>
+              <div className="text-2xl font-bold text-white mt-2 font-mono">30 Frames × 126 Feats</div>
+              <p className="text-[11px] text-gray-400 mt-1">42 Dual-Hand 3D Landmark Vectors</p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800">
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Stratified Splits</div>
+              <div className="text-2xl font-bold text-indigo-400 mt-2 font-mono">116 / 20 / 20</div>
+              <p className="text-[11px] text-gray-400 mt-1">Train: 116 • Val: 20 • Test: 20</p>
+            </div>
+          </div>
+
+          {/* 20 Word Vocabulary Cards */}
+          <div className="p-6 rounded-3xl bg-[#111827] border border-gray-800 shadow-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                  Active Word-Level Sign Vocabulary (20 Classes)
+                </h2>
+                <p className="text-xs text-gray-400">Target daily communication signs with authentic landmark sequences</p>
+              </div>
+              <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800 px-3 py-1 rounded-xl">
+                Source: Voxel51 / WLASL
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {(wordsVocab.length > 0 ? wordsVocab : [
+                { word: 'HELLO', description: 'Open B-hand salute outward from forehead', handshape: 'Open B-hand', movement: 'Outward salute', two_handed: 'No' },
+                { word: 'THANK YOU', description: 'Fingertips from chin outward toward listener', handshape: 'Flat hand', movement: 'Forward arc', two_handed: 'No' },
+                { word: 'PLEASE', description: 'Circular rubbing motion on center of chest', handshape: 'Flat palm', movement: 'Circular chest rub', two_handed: 'No' },
+                { word: 'SORRY', description: 'Fist circling over heart', handshape: 'A-fist', movement: 'Circular motion over heart', two_handed: 'No' },
+                { word: 'YES', description: 'Fist tilting up and down like head nodding', handshape: 'S-fist', movement: 'Tilting wrist', two_handed: 'No' },
+                { word: 'NO', description: 'Index and middle fingers snap down to meet thumb', handshape: 'Index+Middle+Thumb', movement: 'Pinch snap', two_handed: 'No' },
+                { word: 'HELP', description: 'Fist resting on flat palm base lifting upward', handshape: 'A-fist on base', movement: 'Upward lift', two_handed: 'Yes' },
+                { word: 'WATER', description: 'W-handshape index finger tapping chin twice', handshape: 'W-hand', movement: 'Double tap chin', two_handed: 'No' },
+                { word: 'FOOD', description: 'Flattened O-hand fingertips tapping mouth', handshape: 'Flattened O-hand', movement: 'Double tap mouth', two_handed: 'No' },
+                { word: 'LOVE', description: 'Crossed arms/fists hugging chest over heart', handshape: 'Fists or palms', movement: 'Chest crossing', two_handed: 'Yes' },
+                { word: 'GOOD', description: 'Flat hand from chin down into non-dominant palm', handshape: 'Flat hands', movement: 'Chin down to palm', two_handed: 'Yes' },
+                { word: 'BAD', description: 'Flat hand touches chin and flips palm-down', handshape: 'Flat hand', movement: 'Downward flip', two_handed: 'No' },
+                { word: 'FRIEND', description: 'Interlocking hooked index fingers linking twice', handshape: 'Hooked index', movement: 'Interlocking clasp', two_handed: 'Yes' },
+                { word: 'GOODBYE', description: 'Open hand waving outward', handshape: 'Open palm', movement: 'Waving gesture', two_handed: 'No' },
+                { word: 'MORE', description: 'Both flattened O-hands tapping fingertips together', handshape: 'Both O-hands', movement: 'Fingertip tap', two_handed: 'Yes' },
+                { word: 'STOP', description: 'Dominant flat hand sharp vertical chop onto palm', handshape: 'Flat hands', movement: 'Vertical chop', two_handed: 'Yes' },
+                { word: 'EAT', description: 'Flattened O-hand tapping lips', handshape: 'Flattened O-hand', movement: 'Tap lips', two_handed: 'No' },
+                { word: 'DRINK', description: 'C-handshape tilting imaginary cup back to mouth', handshape: 'C-hand', movement: 'Tilting cup', two_handed: 'No' },
+                { word: 'HAPPY', description: 'Both flat hands brushing upward and outward on chest', handshape: 'Flat hands', movement: 'Upward brushing', two_handed: 'Yes' },
+                { word: 'SAD', description: 'Both open hands drawing downward slowly along face', handshape: 'Loose flat hands', movement: 'Downward face draw', two_handed: 'Yes' },
+              ]).map((item: any) => (
+                <div key={item.word} className="p-4 rounded-2xl bg-gray-950 border border-gray-800 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono font-bold text-white text-base">{item.word}</span>
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
+                      {item.two_handed === 'Yes' || item.two_handed === 'Yes (Bimanual)' ? 'Bimanual' : 'Single Hand'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-300 leading-snug">{item.description}</p>
+                  <div className="text-[10px] text-gray-500 pt-1">
+                    <span className="text-gray-400 font-semibold">Motion:</span> {item.movement}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Alphabet Dataset View */
+        <>
+          {/* Dataset Overview Metrics */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-5 rounded-2xl bg-[#111827] border border-gray-800">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Total Valid Images</div>
           <div className="text-2xl font-bold text-white mt-2">
@@ -270,6 +384,8 @@ export const DatasetExplorer: React.FC = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

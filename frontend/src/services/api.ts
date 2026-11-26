@@ -157,4 +157,33 @@ export const api = {
     });
     return res.json();
   },
+
+  // ASL Complete Word-Level Recognition
+  getWordsVocabulary: async (): Promise<any[]> => {
+    const res = await fetch(`${API_BASE}/words/vocabulary`);
+    if (!res.ok) throw new Error('Failed to fetch words vocabulary');
+    return res.json();
+  },
+
+  getWordsEvaluation: async (): Promise<any> => {
+    const res = await fetch(`${API_BASE}/words/evaluation`);
+    if (!res.ok) throw new Error('Failed to fetch words evaluation');
+    return res.json();
+  },
+
+  predictWordSequence: async (sequence: number[][]): Promise<{
+    word: string;
+    confidence: number;
+    top3: Array<{ word: string; confidence: number }>;
+    is_stable: boolean;
+    description?: string;
+  }> => {
+    const res = await fetch(`${API_BASE}/words/predict`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sequence }),
+    });
+    if (!res.ok) throw new Error('Failed to predict word');
+    return res.json();
+  },
 };

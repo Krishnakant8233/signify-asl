@@ -123,5 +123,34 @@ class TestSignGestureApp(unittest.TestCase):
         self.assertEqual(up_res.status_code, 200)
         self.assertEqual(up_res.json()["confidence_threshold"], 65.0)
 
+    def test_07_word_model_endpoints(self):
+        """Test ASL word-level vocabulary, evaluation, and temporal sequence prediction"""
+        # 1. Vocabulary
+        vocab_res = self.client.get("/api/words/vocabulary")
+        self.assertEqual(vocab_res.status_code, 200)
+        vocab = vocab_res.json()
+        self.assertEqual(len(vocab), 20)
+        words = [item["word"] for item in vocab]
+        self.assertIn("HELLO", words)
+        self.assertIn("THANK YOU", words)
+        self.assertIn("WATER", words)
+
+        # 2. Evaluation
+        eval_res = self.client.get("/api/words/evaluation")
+        self.assertEqual(eval_res.status_code, 200)
+        eval_data = eval_res.json()
+        self.assertEqual(eval_data["vocabulary_count"], 20)
+        self.assertIn("classes", eval_data)
+        self.assertIn("confusion_matrix", eval_data)
+
+        # 3. Predict sequence
+        dummy_sequence = np.zeros((30, 126), dtype=float).tolist()
+        pred_res = self.client.post("/api/words/predict", json={"sequence": dummy_sequence})
+        self.assertEqual(pred_res.status_code, 200)
+        pred_data = pred_res.json()
+        self.assertIn("word", pred_data)
+        self.assertIn("confidence", pred_data)
+        self.assertIn("top3", pred_data)
+
 if __name__ == "__main__":
     unittest.main()

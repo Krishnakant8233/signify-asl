@@ -13,23 +13,29 @@ import { api } from '../services/api';
 import { ModelMetadata } from '../types';
 
 export const ModelEvaluation: React.FC = () => {
+  const [evaluationTarget, setEvaluationTarget] = useState<'alphabet' | 'word'>('alphabet');
   const [meta, setMeta] = useState<ModelMetadata | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [hoveredCell, setHoveredCell] = useState<{ actual: string; predicted: string; count: number } | null>(null);
 
   useEffect(() => {
-    fetchEvaluation();
-  }, []);
+    fetchEvaluation(evaluationTarget);
+  }, [evaluationTarget]);
 
-  const fetchEvaluation = async () => {
+  const fetchEvaluation = async (target: 'alphabet' | 'word' = evaluationTarget) => {
     try {
       setLoading(true);
       setError(null);
-      const data = await api.getModelEvaluation();
-      setMeta(data);
+      if (target === 'word') {
+        const data = await api.getWordsEvaluation();
+        setMeta(data);
+      } else {
+        const data = await api.getModelEvaluation();
+        setMeta(data);
+      }
     } catch (e: any) {
-      setError(e.message || 'Evaluation data not found. Train a model to generate genuine metrics.');
+      setError(e.message || `${target === 'word' ? 'Word LSTM' : 'Alphabet CNN'} evaluation data not found.`);
     } finally {
       setLoading(false);
     }
@@ -52,21 +58,49 @@ export const ModelEvaluation: React.FC = () => {
             <BarChart3 className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">CNN Model Evaluation & Validation</h1>
+            <h1 className="text-xl font-bold text-white">
+              {evaluationTarget === 'word'
+                ? 'ASL Word Sequence Model Evaluation (Bi-LSTM)'
+                : 'CNN Alphabet Model Evaluation & Validation'}
+            </h1>
             <p className="text-xs text-gray-400">
-              Genuine classification report, test accuracy, precision, recall, and 26×26 confusion matrix evaluated on unseen test data.
+              {evaluationTarget === 'word'
+                ? 'Empirical metrics for 20 ASL single-sign words evaluated on 30-frame temporal landmark sequences.'
+                : 'Genuine classification report, test accuracy, precision, recall, and 26×26 confusion matrix evaluated on unseen test data.'}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={fetchEvaluation}
-          disabled={loading}
-          className="inline-flex items-center space-x-2 px-4 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold border border-gray-700 transition-all cursor-pointer"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          <span>Refresh Metrics</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Target Toggle */}
+          <div className="flex items-center p-1 bg-gray-950 border border-gray-800 rounded-xl">
+            <button
+              onClick={() => setEvaluationTarget('alphabet')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                evaluationTarget === 'alphabet' ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Alphabet CNN
+            </button>
+            <button
+              onClick={() => setEvaluationTarget('word')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                evaluationTarget === 'word' ? 'bg-cyan-600 text-white' : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Word Bi-LSTM
+            </button>
+          </div>
+
+          <button
+            onClick={() => fetchEvaluation()}
+            disabled={loading}
+            className="inline-flex items-center space-x-2 px-3.5 py-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs font-semibold border border-gray-700 transition-all cursor-pointer"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
       {error ? (
@@ -77,7 +111,7 @@ export const ModelEvaluation: React.FC = () => {
             {error}
           </p>
           <button
-            onClick={fetchEvaluation}
+            onClick={() => fetchEvaluation()}
             className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold"
           >
             Check Again
@@ -247,6 +281,47 @@ export const ModelEvaluation: React.FC = () => {
                   })}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Academic & Dataset Limitations Section */}
+          <div className="p-6 rounded-3xl bg-[#111827] border border-gray-800 shadow-xl space-y-3">
+            <div className="flex items-center space-x-2 text-amber-400">
+              <AlertTriangle className="w-5 h-5 shrink-0" />
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider">
+                Academic Scope & Dataset Limitations Notice
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-gray-300 pt-1">
+              <div className="p-4 rounded-2xl bg-gray-950 border border-gray-800 space-y-1.5">
+                <div className="font-bold text-white flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                  <span>Vocabulary Scope (20 Words)</span>
+                </div>
+                <p className="text-gray-400 leading-relaxed text-[11px]">
+                  This prototype recognizes isolated target vocabulary words and A–Z alphabet signs. It is not an unrestricted sign language translator and does not claim full natural ASL sentence synthesis.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gray-950 border border-gray-800 space-y-1.5">
+                <div className="font-bold text-white flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                  <span>Signer & Recording Variation</span>
+                </div>
+                <p className="text-gray-400 leading-relaxed text-[11px]">
+                  WLASL training samples originate from varied video resolutions, angles, and signers. MediaPipe landmark normalization mitigates scale differences, but lighting and occlusion remain operative factors.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-gray-950 border border-gray-800 space-y-1.5">
+                <div className="font-bold text-white flex items-center space-x-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span>Non-Manual ASL Features</span>
+                </div>
+                <p className="text-gray-400 leading-relaxed text-[11px]">
+                  Complete ASL incorporates facial grammar (e.g. raised eyebrows, mouth morphemes) and torso orientation. The landmark pipeline focuses on upper body & hand articulators for real-time mobile performance.
+                </p>
+              </div>
             </div>
           </div>
         </>

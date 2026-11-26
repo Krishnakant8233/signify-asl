@@ -9,6 +9,7 @@ from ..models.database import get_db, RecognitionSession, PredictionRecord, Sent
 from ..services.dataset_service import dataset_service
 from ..services.model_service import model_service
 from ..services.cv_service import cv_service
+from ..services.word_model_service import word_model_service
 
 router = APIRouter()
 
@@ -50,6 +51,9 @@ def autocorrect_word(word: str = Query(..., description="Word to autocorrect")):
         "correctedWord": corrected,
         "suggestions": matches
     }
+class PredictWordRequest(BaseModel):
+    sequence: List[List[float]] = Field(..., description="Temporal sequence of 30 frames x 126 landmark coordinates")
+
 class RecognizeFrameRequest(BaseModel):
     image: str = Field(..., description="Base64 encoded JPEG or PNG image frame from webcam")
 
@@ -272,3 +276,19 @@ def update_settings(req: SettingsUpdateRequest):
     if req.auto_speech_enabled is not None:
         CURRENT_SETTINGS["auto_speech_enabled"] = req.auto_speech_enabled
     return CURRENT_SETTINGS
+
+# --- ASL Complete Word-Level Recognition Endpoints ---
+@router.get("/words/vocabulary")
+def get_words_vocabulary():
+    """Returns catalog of supported ASL word signs, movement descriptions, and training status."""
+    return word_model_service.get_vocabulary()
+
+@router.get("/words/evaluation")
+def get_words_evaluation():
+    """Returns actual test metrics, confusion matrix, and training history for the word sequence model."""
+    return word_model_service.get_evaluation_metrics()
+
+@router.post("/words/predict")
+def predict_word_sequence(req: PredictWordRequest):
+    """Predicts ASL word from a temporal landmark sequence."""
+    return word_model_service.predict_sequence(req.sequence)

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { handDetector } from '../services/handDetector';
 import { aslClassifier, ClassificationResult } from '../services/aslClassifier';
+import { aslWordClassifier, WordClassificationResult } from '../services/aslWordClassifier';
 import { speechService } from '../services/speech';
 import { api } from '../services/api';
 
@@ -88,6 +89,15 @@ export const LiveRecognition: React.FC = () => {
   const [copied, setCopied] = useState<boolean>(false);
   const [saved, setSaved] = useState<boolean>(false);
 
+  // Recognition Mode: 'alphabet' (Mode A) vs 'word' (Mode B: Single-Sign Complete Words)
+  const [recognitionMode, setRecognitionMode] = useState<'alphabet' | 'word'>('alphabet');
+  const recognitionModeRef = useRef<'alphabet' | 'word'>('alphabet');
+  const [wordResult, setWordResult] = useState<WordClassificationResult | null>(null);
+  const [lastCommittedWord, setLastCommittedWord] = useState<string>('');
+  const [vocabularyList, setVocabularyList] = useState<any[]>([]);
+  const [showWordGuide, setShowWordGuide] = useState<boolean>(false);
+  const wordVotesRef = useRef<Record<string, number>>({});
+
   // Timing Constants: 3s hold to predict, 2s cooldown to relax hand / take hand down
   const HOLD_DURATION_MS = 3000;
   const COOLDOWN_DURATION_MS = 2000;
@@ -131,6 +141,23 @@ export const LiveRecognition: React.FC = () => {
       setSuggestions([]);
     }
   }, [currentWord]);
+
+  // Load Word Vocabulary Guide
+  useEffect(() => {
+    api.getWordsVocabulary().then(setVocabularyList).catch(() => {});
+  }, []);
+
+  const handleModeChange = (mode: 'alphabet' | 'word') => {
+    setRecognitionMode(mode);
+    recognitionModeRef.current = mode;
+    cycleStateRef.current = 'IDLE';
+    setPhase('IDLE');
+    setHoldProgress(0);
+    setCooldownProgress(0);
+    sampleVotesRef.current = {};
+    wordVotesRef.current = {};
+    aslWordClassifier.clearBuffer();
+  };
 
   // Space & Autocorrect word committer (Strictly prevents duplicate words)
   const handleSpace = useCallback(async (overrideWord?: string) => {
@@ -293,6 +320,97 @@ export const LiveRecognition: React.FC = () => {
         }
       }
 
+      // MODE B: Complete ASL Word Recognition (Single-Sign Temporal Trajectories)
+      if (recognitionModeRef.current === 'word') {
+        if (landmarks && landmarks.length >= 21) {
+          setHandDetected(true);
+          aslWordClassifier.pushFrame(landmarks);
+          aslClassifier.drawSkeleton(ctx, landmarks, canvas.width, canvas.height);
+
+          aslWordClassifier.classifyLiveWord().then((wRes) => {
+            if (!wRes) return;
+            setWordResult(wRes);
+
+            if (cycleStateRef.current === 'COOLDOWN') return;
+
+            if (wRes.word && wRes.confidence >= 60.0) {
+              if (cycleStateRef.current === 'IDLE') {
+                cycleStateRef.current = 'HOLDING';
+                holdStartRef.current = now;
+                wordVotesRef.current = { [wRes.word]: 1 };
+                setPhase('HOLDING');
+                setHoldProgress(0);
+                setHoldRemainingSeconds(3.0);
+              } else if (cycleStateRef.current === 'HOLDING') {
+                wordVotesRef.current[wRes.word] = (wordVotesRef.current[wRes.word] || 0) + 1;
+                const elapsed = now - holdStartRef.current;
+                const progress = Math.min(100, Math.round((elapsed / HOLD_DURATION_MS) * 100));
+                const remaining = Math.max(0, Math.round((HOLD_DURATION_MS - elapsed) / 100) / 10);
+                setHoldProgress(progress);
+                setHoldRemainingSeconds(remaining);
+
+                if (elapsed >= HOLD_DURATION_MS) {
+                  const votes = wordVotesRef.current;
+                  let winnerWord = wRes.word;
+                  let maxV = 0;
+                  for (const w in votes) {
+                    if (votes[w] > maxV) {
+                      maxV = votes[w];
+                      winnerWord = w;
+                    }
+                  }
+
+                  setLastCommittedWord(winnerWord);
+
+                  // Directly commit complete word into sentence
+                  setSentence((prev) => {
+                    const words = prev.trim().split(/\s+/).filter(Boolean);
+                    if (words.length > 0 && words[words.length - 1] === winnerWord) {
+                      return prev;
+                    }
+                    return prev ? `${prev} ${winnerWord}` : winnerWord;
+                  });
+
+                  // Voice output for the recognized word
+                  speechService.speakText(winnerWord);
+
+                  // Enter 2s cooldown to relax hand & prevent repeat
+                  cycleStateRef.current = 'COOLDOWN';
+                  cooldownStartRef.current = now;
+                  setPhase('COOLDOWN');
+                  setCooldownProgress(0);
+                  setCooldownRemainingSeconds(2.0);
+                  setHoldProgress(100);
+                  wordVotesRef.current = {};
+                  aslWordClassifier.clearBuffer();
+                }
+              }
+            } else {
+              if (cycleStateRef.current === 'HOLDING') {
+                cycleStateRef.current = 'IDLE';
+                setPhase('IDLE');
+                setHoldProgress(0);
+                setHoldRemainingSeconds(3.0);
+                wordVotesRef.current = {};
+              }
+            }
+          });
+        } else {
+          setHandDetected(false);
+          setWordResult(null);
+          aslWordClassifier.pushFrame(null);
+          if (cycleStateRef.current === 'HOLDING') {
+            cycleStateRef.current = 'IDLE';
+            setPhase('IDLE');
+            setHoldProgress(0);
+            setHoldRemainingSeconds(3.0);
+            wordVotesRef.current = {};
+          }
+        }
+        return;
+      }
+
+      // MODE A: ASL Alphabet Fingerspelling (A–Z)
       if (landmarks && landmarks.length >= 21) {
         setHandDetected(true);
 
@@ -506,6 +624,39 @@ export const LiveRecognition: React.FC = () => {
 
         {/* Controls Ribbon */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Dual Mode Switcher */}
+          <div className="flex items-center p-1 bg-gray-950 border border-gray-800 rounded-2xl shadow-inner">
+            <button
+              onClick={() => handleModeChange('alphabet')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                recognitionMode === 'alphabet'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Mode A: Alphabet (A–Z)
+            </button>
+            <button
+              onClick={() => handleModeChange('word')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                recognitionMode === 'word'
+                  ? 'bg-gradient-to-r from-indigo-600 to-cyan-600 text-white shadow-md'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              Mode B: Complete Words (20 Signs)
+            </button>
+          </div>
+
+          {/* Word Signs Guide Button */}
+          <button
+            onClick={() => setShowWordGuide(!showWordGuide)}
+            className="px-3.5 py-2 rounded-xl bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-300 border border-indigo-500/40 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer shadow-sm"
+          >
+            <Sparkles className="w-4 h-4 text-cyan-400" />
+            <span>Word Signs (20)</span>
+          </button>
+
           {/* Mobile Phone Connection Pill */}
           <button
             onClick={() => setShowMobileModal(!showMobileModal)}
@@ -515,13 +666,13 @@ export const LiveRecognition: React.FC = () => {
             <span>Open on Mobile</span>
           </button>
 
-          {/* ASL Reference Guide Button */}
+          {/* ASL Alphabet Reference Guide Button */}
           <button
             onClick={() => setShowGuide(!showGuide)}
             className="px-3.5 py-2 rounded-xl bg-gray-900 hover:bg-gray-800 text-gray-300 border border-gray-800 text-xs font-semibold flex items-center space-x-1.5 transition-all cursor-pointer"
           >
             <HelpCircle className="w-4 h-4 text-blue-400" />
-            <span>Hand Signs</span>
+            <span>Alphabet Guide</span>
           </button>
 
           {/* Camera Switcher (Front / Back for Mobile) */}
@@ -725,11 +876,15 @@ export const LiveRecognition: React.FC = () => {
               </span>
             </div>
 
-            {/* Giant Letter & High Confidence Display */}
+            {/* Giant Letter or Word & High Confidence Display */}
             <div className="flex items-center justify-between my-2">
               <div className="flex items-baseline space-x-4">
-                <div className="text-8xl font-black tracking-tight text-white font-mono bg-gradient-to-br from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent">
-                  {phase === 'COOLDOWN'
+                <div className={`${recognitionMode === 'word' ? 'text-4xl sm:text-5xl' : 'text-8xl'} font-black tracking-tight text-white font-mono bg-gradient-to-br from-white via-blue-100 to-cyan-300 bg-clip-text text-transparent break-all`}>
+                  {recognitionMode === 'word'
+                    ? phase === 'COOLDOWN'
+                      ? lastCommittedWord || '—'
+                      : wordResult?.word || '—'
+                    : phase === 'COOLDOWN'
                     ? lastCommittedChar || '—'
                     : result?.isResting
                     ? '—'
@@ -737,13 +892,24 @@ export const LiveRecognition: React.FC = () => {
                     ? '␣'
                     : result?.letter || '—'}
                 </div>
-                {handDetected && result && !result.isResting && result.letter && (
-                  <div>
-                    <div className="text-xs font-semibold text-gray-400">Confidence</div>
-                    <div className="text-3xl font-extrabold text-emerald-400 font-mono">
-                      {result.confidence.toFixed(1)}%
+                {recognitionMode === 'word' ? (
+                  handDetected && wordResult && wordResult.word && (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-400">Confidence</div>
+                      <div className="text-3xl font-extrabold text-emerald-400 font-mono">
+                        {wordResult.confidence.toFixed(1)}%
+                      </div>
                     </div>
-                  </div>
+                  )
+                ) : (
+                  handDetected && result && !result.isResting && result.letter && (
+                    <div>
+                      <div className="text-xs font-semibold text-gray-400">Confidence</div>
+                      <div className="text-3xl font-extrabold text-emerald-400 font-mono">
+                        {result.confidence.toFixed(1)}%
+                      </div>
+                    </div>
+                  )
                 )}
               </div>
 
@@ -765,9 +931,9 @@ export const LiveRecognition: React.FC = () => {
                     : 'READY'}
                 </span>
 
-                {lastCommittedChar && (
+                {(recognitionMode === 'word' ? lastCommittedWord : lastCommittedChar) && (
                   <div className="text-[10px] text-emerald-400 font-mono">
-                    Last: "{lastCommittedChar}" locked
+                    Last: "{recognitionMode === 'word' ? lastCommittedWord : lastCommittedChar}" locked
                   </div>
                 )}
               </div>
@@ -777,7 +943,9 @@ export const LiveRecognition: React.FC = () => {
             {phase === 'HOLDING' && (
               <div className="space-y-1 my-2">
                 <div className="flex justify-between text-[11px] text-gray-400">
-                  <span className="text-cyan-300 font-semibold">Hold Progress (3.0s Hold)</span>
+                  <span className="text-cyan-300 font-semibold">
+                    {recognitionMode === 'word' ? 'Sign Hold Progress (3.0s Hold)' : 'Hold Progress (3.0s Hold)'}
+                  </span>
                   <span className="font-mono text-cyan-400 font-bold">{holdRemainingSeconds.toFixed(1)}s left</span>
                 </div>
                 <div className="h-2.5 rounded-full bg-gray-950 border border-cyan-500/30 overflow-hidden">
@@ -806,7 +974,11 @@ export const LiveRecognition: React.FC = () => {
 
             {phase === 'IDLE' && (
               <div className="space-y-1 my-2 text-[11px] text-gray-400">
-                <span>Hold any sign steadily for 3 seconds to predict letter</span>
+                <span>
+                  {recognitionMode === 'word'
+                    ? 'Hold single ASL sign steadily to predict complete word'
+                    : 'Hold any sign steadily for 3 seconds to predict letter'}
+                </span>
                 <div className="h-2 rounded-full bg-gray-950 border border-gray-800" />
               </div>
             )}
@@ -817,6 +989,8 @@ export const LiveRecognition: React.FC = () => {
               <div className="font-semibold text-white mt-0.5">
                 {phase === 'COOLDOWN'
                   ? 'Cool-down active: lower or relax hand without taking any inputs'
+                  : recognitionMode === 'word'
+                  ? wordResult?.description || 'Perform ASL sign in view of camera'
                   : result?.gestureDescription || 'Position hand in front of camera to begin'}
               </div>
             </div>
@@ -826,35 +1000,65 @@ export const LiveRecognition: React.FC = () => {
           <div className="p-5 rounded-3xl bg-[#111827] border border-gray-800 shadow-xl space-y-2.5">
             <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center justify-between">
               <span>Candidate Matches</span>
-              <span className="text-[10px] text-gray-500 font-mono">3D Joint Vector</span>
+              <span className="text-[10px] text-gray-500 font-mono">
+                {recognitionMode === 'word' ? 'Temporal Bi-LSTM' : '3D Joint Vector'}
+              </span>
             </h3>
 
             <div className="space-y-2">
-              {(result?.top3 && result.top3.length > 0
-                ? result.top3
-                : [
-                    { letter: 'L', confidence: 0 },
-                    { letter: 'V', confidence: 0 },
-                    { letter: 'W', confidence: 0 },
-                  ]
-              ).map((p, idx) => (
-                <div key={idx} className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="font-bold text-white font-mono">
-                      {p.letter === ' ' ? 'SPACE (␣)' : `Sign "${p.letter}"`}
-                    </span>
-                    <span className="text-gray-400 font-mono">{p.confidence.toFixed(1)}%</span>
+              {recognitionMode === 'word' ? (
+                (wordResult?.top3 && wordResult.top3.length > 0
+                  ? wordResult.top3
+                  : [
+                      { word: 'HELLO', confidence: 0 },
+                      { word: 'THANK YOU', confidence: 0 },
+                      { word: 'PLEASE', confidence: 0 },
+                    ]
+                ).map((p, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-bold text-white font-mono">
+                        Word "{p.word}"
+                      </span>
+                      <span className="text-gray-400 font-mono">{p.confidence.toFixed(1)}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-950 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-200 ${
+                          idx === 0 ? 'bg-cyan-500' : idx === 1 ? 'bg-indigo-500' : 'bg-gray-600'
+                        }`}
+                        style={{ width: `${p.confidence}%` }}
+                      />
+                    </div>
                   </div>
-                  <div className="h-1.5 rounded-full bg-gray-950 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-200 ${
-                        idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-gray-600'
-                      }`}
-                      style={{ width: `${p.confidence}%` }}
-                    />
+                ))
+              ) : (
+                (result?.top3 && result.top3.length > 0
+                  ? result.top3
+                  : [
+                      { letter: 'L', confidence: 0 },
+                      { letter: 'V', confidence: 0 },
+                      { letter: 'W', confidence: 0 },
+                    ]
+                ).map((p, idx) => (
+                  <div key={idx} className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="font-bold text-white font-mono">
+                        {p.letter === ' ' ? 'SPACE (␣)' : `Sign "${p.letter}"`}
+                      </span>
+                      <span className="text-gray-400 font-mono">{p.confidence.toFixed(1)}%</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-gray-950 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-200 ${
+                          idx === 0 ? 'bg-blue-500' : idx === 1 ? 'bg-indigo-500' : 'bg-gray-600'
+                        }`}
+                        style={{ width: `${p.confidence}%` }}
+                      />
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>
@@ -1040,6 +1244,83 @@ export const LiveRecognition: React.FC = () => {
                 </div>
                 <div className="text-[10px] text-gray-400 mt-1 leading-snug line-clamp-3">
                   {description}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ASL Word Vocabulary Visual Reference Guide Modal */}
+      {showWordGuide && (
+        <div className="p-6 rounded-3xl bg-[#111827] border border-cyan-500/30 shadow-2xl space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <Sparkles className="w-5 h-5 text-cyan-400" />
+              <div>
+                <h3 className="text-base font-bold text-white">ASL Complete Word Sign Lexicon (20 Target Classes)</h3>
+                <p className="text-xs text-gray-400">Genuine WLASL trained word vocabulary. Tap any word to insert & hear pronunciation.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowWordGuide(false)}
+              className="text-xs text-gray-400 hover:text-white font-bold px-3 py-1 bg-gray-800 rounded-lg cursor-pointer"
+            >
+              Close Lexicon ✕
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+            {(vocabularyList.length > 0
+              ? vocabularyList
+              : [
+                  { word: 'HELLO', description: 'Open B-hand salute outward from forehead', handshape: 'Open B-hand', movement: 'Outward salute', two_handed: 'No' },
+                  { word: 'THANK YOU', description: 'Fingertips from chin outward toward listener', handshape: 'Flat hand', movement: 'Forward arc', two_handed: 'No' },
+                  { word: 'PLEASE', description: 'Circular rubbing motion on center of chest', handshape: 'Flat palm', movement: 'Circular chest rub', two_handed: 'No' },
+                  { word: 'SORRY', description: 'Fist circling over heart', handshape: 'A-fist', movement: 'Circular motion over heart', two_handed: 'No' },
+                  { word: 'YES', description: 'Fist tilting up and down like head nodding', handshape: 'S-fist', movement: 'Tilting wrist', two_handed: 'No' },
+                  { word: 'NO', description: 'Index and middle fingers snap down to meet thumb', handshape: 'Index+Middle+Thumb', movement: 'Pinch snap', two_handed: 'No' },
+                  { word: 'HELP', description: 'Fist resting on flat palm base lifting upward', handshape: 'A-fist on base', movement: 'Upward lift', two_handed: 'Yes' },
+                  { word: 'WATER', description: 'W-handshape index finger tapping chin twice', handshape: 'W-hand', movement: 'Double tap chin', two_handed: 'No' },
+                  { word: 'FOOD', description: 'Flattened O-hand fingertips tapping mouth', handshape: 'Flattened O-hand', movement: 'Double tap mouth', two_handed: 'No' },
+                  { word: 'LOVE', description: 'Crossed arms/fists hugging chest over heart', handshape: 'Fists or palms', movement: 'Chest crossing', two_handed: 'Yes' },
+                  { word: 'GOOD', description: 'Flat hand from chin down into non-dominant palm', handshape: 'Flat hands', movement: 'Chin down to palm', two_handed: 'Yes' },
+                  { word: 'BAD', description: 'Flat hand touches chin and flips palm-down', handshape: 'Flat hand', movement: 'Downward flip', two_handed: 'No' },
+                  { word: 'FRIEND', description: 'Interlocking hooked index fingers linking twice', handshape: 'Hooked index', movement: 'Interlocking clasp', two_handed: 'Yes' },
+                  { word: 'GOODBYE', description: 'Open hand waving outward', handshape: 'Open palm', movement: 'Waving gesture', two_handed: 'No' },
+                  { word: 'MORE', description: 'Both flattened O-hands tapping fingertips together', handshape: 'Both O-hands', movement: 'Fingertip tap', two_handed: 'Yes' },
+                  { word: 'STOP', description: 'Dominant flat hand sharp vertical chop onto palm', handshape: 'Flat hands', movement: 'Vertical chop', two_handed: 'Yes' },
+                  { word: 'EAT', description: 'Flattened O-hand tapping lips', handshape: 'Flattened O-hand', movement: 'Tap lips', two_handed: 'No' },
+                  { word: 'DRINK', description: 'C-handshape tilting imaginary cup back to mouth', handshape: 'C-hand', movement: 'Tilting cup', two_handed: 'No' },
+                  { word: 'HAPPY', description: 'Both flat hands brushing upward and outward on chest', handshape: 'Flat hands', movement: 'Upward brushing', two_handed: 'Yes' },
+                  { word: 'SAD', description: 'Both open hands drawing downward slowly along face', handshape: 'Loose flat hands', movement: 'Downward face draw', two_handed: 'Yes' },
+                ]
+            ).map((item: any) => (
+              <div
+                key={item.word}
+                onClick={() => {
+                  setSentence((prev) => {
+                    const words = prev.trim().split(/\s+/).filter(Boolean);
+                    if (words.length > 0 && words[words.length - 1] === item.word) return prev;
+                    return prev ? `${prev} ${item.word}` : item.word;
+                  });
+                  speechService.speakText(item.word);
+                }}
+                className="p-3.5 rounded-2xl bg-gray-950 border border-gray-800 hover:border-cyan-500/50 hover:bg-cyan-950/20 transition-all cursor-pointer group space-y-1.5"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-extrabold text-white font-mono group-hover:text-cyan-300">
+                    {item.word}
+                  </div>
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
+                    {item.two_handed === 'Yes' || item.two_handed === 'Yes (Bimanual)' ? 'Bimanual' : 'Single Hand'}
+                  </span>
+                </div>
+                <div className="text-[11px] text-gray-300 leading-snug">
+                  {item.description}
+                </div>
+                <div className="text-[10px] text-gray-500">
+                  <span className="text-gray-400 font-semibold">Shape:</span> {item.handshape}
                 </div>
               </div>
             ))}
