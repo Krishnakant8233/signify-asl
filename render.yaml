@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: signify-asl-recognition
+    runtime: python
+    plan: free
+    buildCommand: "./build_render.sh"
+    startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
